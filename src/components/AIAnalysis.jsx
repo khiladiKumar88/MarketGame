@@ -67,7 +67,7 @@ export default function AIAnalysis({ preSelected }) {
 
     const shares = Math.floor(capital / price);
 
-    const prompt = `You are MarketSaathi, an expert Indian stock market analyst. Help a BEGINNER investor.
+    const prompt = `You are Market KA Khiladi, an expert Indian stock market analyst. Help a BEGINNER investor.
 
 Stock: ${finalSymbol}
 Current Price: ₹${price.toLocaleString('en-IN')}

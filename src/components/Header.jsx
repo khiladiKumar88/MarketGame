@@ -19,7 +19,7 @@ export default function Header() {
       <div className="logo">
         <div className="logo-icon">📈</div>
         <div>
-          <div className="logo-text">MarketSaathi</div>
+          <div className="logo-text">Market KA Khiladi</div>
           <div className="logo-sub">Indian Market Intelligence</div>
         </div>
       </div>
