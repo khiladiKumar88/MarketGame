@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
+import 'dotenv/config';
+
 
 const app = express();
 app.use(cors());
@@ -8,9 +10,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 // ── CONFIG ─────────────────────────────────────────────────
-const UPSTOX_API_KEY    = 'b059b87f-a992-4925-8840-2649683e41ed';
-const UPSTOX_API_SECRET = 'zu0z8aexxn';
-const UPSTOX_REDIRECT   = 'http://localhost:5173';
+const UPSTOX_API_KEY    = process.env.UPSTOX_API_KEY;
+const UPSTOX_API_SECRET = process.env.UPSTOX_API_SECRET;
+const REDIRECT_URI      = process.env.UPSTOX_REDIRECT_URI;
 let   UPSTOX_TOKEN      = 'eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI1QUNQQkgiLCJqdGkiOiI2OWI1MDZlYmE4OGMzYTVkNmRiOGM1OWMiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlhdCI6MTc3MzQ3MTQ2NywiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxNzczNTI1NjAwfQ.beXthzE7G_8obGuzNnBvyrGgA3ny4yHXhXHB9LpPh-A'; 
 
 const UPSTOX_HEADERS = () => ({
