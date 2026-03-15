@@ -319,28 +319,59 @@ async function getAIRec(result, capital, btResult) {
   } catch { return null; }
 }
 
-// ── analyzeOne — now passes volSpike to scoreSignal ──────────
-async function analyzeOne(target) {
+// ── Timeframe config ──────────────────────────────────────────
+const TIMEFRAMES = {
+  scalping: {
+    label:      '🕐 Scalping',
+    interval:   '5minute',
+    holdTime:   '5–30 min',
+    desc:       '5 min candles — fast signals for quick in/out trades',
+    color:      '#f59e0b',
+    minCandles: 20,
+  },
+  intraday: {
+    label:      '⏱ Intraday',
+    interval:   '30minute',
+    holdTime:   '2–4 hours',
+    desc:       '30 min candles — full intraday trades',
+    color:      '#6366f1',
+    minCandles: 20,
+  },
+  swing: {
+    label:      '📅 Swing',
+    interval:   'day',
+    holdTime:   '2–10 days',
+    desc:       'Daily candles — multi-day swing trades',
+    color:      '#22c55e',
+    minCandles: 30,
+  },
+};
+
+// ── analyzeOne — accepts timeframe ───────────────────────────
+async function analyzeOne(target, tfKey = 'intraday') {
   try {
-    const [day, h30] = await Promise.all([
-      fetchUpstoxCandles(target.token,'day'),
-      fetchUpstoxCandles(target.token,'30minute'),
+    const tf = TIMEFRAMES[tfKey] || TIMEFRAMES.intraday;
+    const [day, tfCandles] = await Promise.all([
+      fetchUpstoxCandles(target.token, 'day'),
+      tf.interval === 'day'
+        ? fetchUpstoxCandles(target.token, 'day')
+        : fetchUpstoxCandles(target.token, tf.interval),
     ]);
     if (!day.length) return null;
-    const price    = day[day.length-1].close;
-    const prev     = day[day.length-2]?.close??price;
-    const chgPct   = +((price-prev)/prev*100).toFixed(2);
-    const vol      = day[day.length-1].volume||0;
-    const avgVol   = day.slice(-10).reduce((a,c)=>a+(c.volume||0),0)/10;
-    const volSpike = +(avgVol>0?vol/avgVol:1).toFixed(1);
-    const src      = h30.length>=20?h30:day;
-    const r=calcRSI(day), m=calcMACD(day), b=calcBB(day),
-          a=calcADX(day), st=calcST(day), vw=calcVWAP(src),
+    const src    = tfCandles.length >= tf.minCandles ? tfCandles : day;
+    const price  = src[src.length-1].close;
+    const prev   = src[src.length-2]?.close ?? price;
+    const chgPct = +((price-prev)/prev*100).toFixed(2);
+    const vol    = day[day.length-1].volume || 0;
+    const avgVol = day.slice(-10).reduce((a,c)=>a+(c.volume||0),0)/10;
+    const volSpike = +(avgVol>0 ? vol/avgVol : 1).toFixed(1);
+    const r=calcRSI(src), m=calcMACD(src), b=calcBB(src),
+          a=calcADX(src), st=calcST(src), vw=calcVWAP(src),
           pats=detectPatterns(src);
-    // ✅ volSpike now passed into scoreSignal
     const sc = scoreSignal({ r,m,b,a,st,vw,price,pats,volSpike });
     if (sc.dir==='NEUTRAL'||sc.confidence<60) return null;
-    return { ...target, price, chgPct, volSpike, rsi:r, macd:m, bb:b, adx:a, st, vwap:vw, pats, ...sc, candles:day };
+    return { ...target, price, chgPct, volSpike, rsi:r, macd:m, bb:b, adx:a, st, vwap:vw, pats, ...sc,
+      candles:src, tfKey, tfLabel:tf.label, holdTime:tf.holdTime };
   } catch { return null; }
 }
 
@@ -668,9 +699,20 @@ function SmartCard({ result, rank, capital, onValidate }) {
           {result.volSpike>1.5&&<span style={{color:'var(--gold)',marginLeft:6}}>⚡{result.volSpike}x</span>}
         </div>
       </div>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-        <div style={{fontSize:15,fontWeight:800,color,background:`${color}15`,padding:'5px 14px',borderRadius:20,border:`1px solid ${color}44`}}>
-          {isCall?'📈 BUY CALL':'📉 BUY PUT'}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <div>
+          <div style={{fontSize:15,fontWeight:800,color,background:`${color}15`,padding:'5px 14px',borderRadius:20,border:`1px solid ${color}44`,marginBottom:5}}>
+            {isCall?'📈 BUY CALL':'📉 BUY PUT'}
+          </div>
+          {result.tfLabel&&(
+            <div style={{fontSize:10,fontWeight:700,
+              color: TIMEFRAMES[result.tfKey]?.color??'var(--gold)',
+              background:(TIMEFRAMES[result.tfKey]?.color??'#f59e0b')+'15',
+              padding:'2px 8px',borderRadius:6,display:'inline-block',
+              border:`1px solid ${(TIMEFRAMES[result.tfKey]?.color??'#f59e0b')}33`}}>
+              {result.tfLabel} · Hold {result.holdTime}
+            </div>
+          )}
         </div>
         <div style={{textAlign:'right'}}>
           <div style={{fontSize:10,color:'var(--text-muted)'}}>AI Confidence</div>
@@ -735,6 +777,7 @@ function SetupScreen({ onStart }) {
   const [scanMode,    setScanMode]  = useState('All');
   const [customPicks, setCustom]    = useState([]);
   const [showCustom,  setShowCustom]= useState(false);
+  const [tfKey,       setTfKey]     = useState('scalping');
   const [error,       setError]     = useState('');
   const presets = [25000, 50000, 100000, 200000];
 
@@ -749,7 +792,7 @@ function SetupScreen({ onStart }) {
       ? SCAN_TARGETS.filter(t => customPicks.includes(t.sym))
       : TARGET_GROUPS[scanMode] || SCAN_TARGETS;
     if (!targets.length) { setError('Select at least one stock to scan'); return; }
-    onStart({ capital:c, minConf, targets });
+    onStart({ capital:c, minConf, targets, tfKey });
   }
 
   const activeTargets = scanMode === 'Custom'
@@ -765,6 +808,46 @@ function SetupScreen({ onStart }) {
           7 indicators · 16 candlestick patterns · Backtest validation<br/>
           <strong style={{color:'var(--gold)'}}>Click any signal → Validate with historical backtest</strong>
         </div>
+      </div>
+
+      {/* Timeframe selector */}
+      <div style={{marginBottom:14}}>
+        <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:1,marginBottom:10}}>
+          ⏱ Trading Timeframe
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+          {Object.entries(TIMEFRAMES).map(([key, tf])=>{
+            const active = tfKey===key;
+            return (
+              <button key={key} onClick={()=>setTfKey(key)} style={{
+                padding:'14px 10px', borderRadius:12, border:'2px solid',
+                borderColor: active ? tf.color : 'var(--border)',
+                background: active ? tf.color+'18' : 'var(--bg-secondary)',
+                cursor:'pointer', textAlign:'center', transition:'all 0.15s',
+              }}>
+                <div style={{fontSize:18,marginBottom:4}}>{tf.label.split(' ')[0]}</div>
+                <div style={{fontSize:13,fontWeight:800,color: active ? tf.color : 'var(--text-primary)',marginBottom:3}}>
+                  {tf.label.split(' ').slice(1).join(' ')}
+                </div>
+                <div style={{fontSize:10,color:'var(--text-muted)',marginBottom:4}}>{tf.holdTime}</div>
+                <div style={{fontSize:9,color: active ? tf.color : 'var(--text-muted)',lineHeight:1.4}}>{tf.desc}</div>
+                {active && (
+                  <div style={{marginTop:6,fontSize:9,fontWeight:700,
+                    background:tf.color+'22',color:tf.color,
+                    padding:'2px 8px',borderRadius:8,display:'inline-block'}}>
+                    ✓ Selected
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        {tfKey==='scalping'&&(
+          <div style={{marginTop:8,padding:'8px 12px',background:'rgba(245,158,11,0.08)',
+            border:'1px solid rgba(245,158,11,0.25)',borderRadius:8,fontSize:11,color:'#f59e0b'}}>
+            ⚡ Scalping mode uses 5 min candles. Upstox gives ~30 days of 5min data so backtest will be shorter but signals are fast.
+          </div>
+        )}
       </div>
 
       {/* Capital + Scan Target side by side */}
@@ -916,12 +999,13 @@ export default function SmartSignals({ indices }) {
   async function startScan(cfg) {
     setConfig(cfg); setPhase('scanning'); setProg(0); setResults([]); cancelRef.current=false;
     const targets = cfg.targets || SCAN_TARGETS;
+    const tfKey   = cfg.tfKey || 'intraday';
     const found=[];
     for(let i=0;i<targets.length;i++){
       if(cancelRef.current) break;
       setScanMsg(`Analyzing ${targets[i].sym}...`);
       setProg(Math.round((i+1)/targets.length*100));
-      const r = await analyzeOne(targets[i]);
+      const r = await analyzeOne(targets[i], tfKey);
       if(r&&r.confidence>=cfg.minConf) found.push(r);
       await new Promise(res=>setTimeout(res,300));
     }
@@ -942,7 +1026,7 @@ export default function SmartSignals({ indices }) {
       <div style={{fontSize:44,marginBottom:16}}>🎯</div>
       <div style={{fontSize:18,fontWeight:800,color:'var(--text-primary)',marginBottom:6}}>Smart Scanning...</div>
       <div style={{fontSize:13,color:'var(--text-muted)',marginBottom:28}}>
-        7 indicators · 16 candlestick patterns · {config?.minConf}%+ confidence · {config?.targets?.length??15} stocks
+        {TIMEFRAMES[config?.tfKey]?.label ?? '⏱ Intraday'} · {TIMEFRAMES[config?.tfKey]?.holdTime} hold · 7 indicators · 16 patterns · {config?.targets?.length??15} stocks
       </div>
       <div style={{background:'var(--bg-secondary)',borderRadius:10,height:12,overflow:'hidden',marginBottom:10}}>
         <div style={{width:`${progress}%`,height:'100%',borderRadius:10,
@@ -966,7 +1050,10 @@ export default function SmartSignals({ indices }) {
             </div>
             <div style={{fontSize:12,color:'var(--text-muted)',marginTop:2}}>
               Capital: <strong style={{color:'var(--gold)',fontFamily:'DM Mono'}}>₹{config?.capital?.toLocaleString('en-IN')}</strong>
-              &nbsp;·&nbsp;{results.length} signals · 7 indicators · 16 patterns
+              &nbsp;·&nbsp;{results.length} signals
+              &nbsp;·&nbsp;<span style={{color:TIMEFRAMES[config?.tfKey]?.color??'var(--gold)',fontWeight:700}}>
+                {TIMEFRAMES[config?.tfKey]?.label} · {TIMEFRAMES[config?.tfKey]?.holdTime} hold
+              </span>
               &nbsp;·&nbsp;<span style={{color:'var(--gold)'}}>Click any card → Validate with Backtest</span>
             </div>
           </div>
