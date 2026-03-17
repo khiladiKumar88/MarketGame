@@ -12,7 +12,7 @@ app.use(express.json());
 // ── CONFIG ─────────────────────────────────────────────────
 const UPSTOX_API_KEY    = process.env.UPSTOX_API_KEY;
 const UPSTOX_API_SECRET = process.env.UPSTOX_API_SECRET;
-const REDIRECT_URI      = process.env.UPSTOX_REDIRECT_URI;
+const UPSTOX_REDIRECT_URL     = process.env.UPSTOX_REDIRECT_URL;
 let   UPSTOX_TOKEN      = 'eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI1QUNQQkgiLCJqdGkiOiI2OWI1MDZlYmE4OGMzYTVkNmRiOGM1OWMiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlhdCI6MTc3MzQ3MTQ2NywiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxNzczNTI1NjAwfQ.beXthzE7G_8obGuzNnBvyrGgA3ny4yHXhXHB9LpPh-A'; 
 
 const UPSTOX_HEADERS = () => ({
@@ -85,7 +85,7 @@ app.get('/api/history/:symbol', async (req, res) => {
 // UPSTOX AUTH ROUTES
 // ══════════════════════════════════════════════════════════
 app.get('/api/upstox/login-url', (req, res) => {
-  const url = `https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id=${UPSTOX_API_KEY}&redirect_uri=${UPSTOX_REDIRECT}`;
+  const url = `https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id=${UPSTOX_API_KEY}&redirect_uri=${UPSTOX_REDIRECT_URL}`;
   res.json({ url });
 });
 
@@ -95,7 +95,7 @@ app.get('/api/upstox/token', async (req, res) => {
       code:          req.query.code,
       client_id:     UPSTOX_API_KEY,
       client_secret: UPSTOX_API_SECRET,
-      redirect_uri:  UPSTOX_REDIRECT,
+      redirect_uri:  UPSTOX_REDIRECT_URL,
       grant_type:    'authorization_code'
     });
     const response = await axios.post(
